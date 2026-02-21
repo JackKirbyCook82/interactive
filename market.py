@@ -40,23 +40,29 @@ class InteractiveMaintainURL(InteractiveMarketURL, path=["tickle"]): pass
 class InteractiveAccountsURL(InteractiveMarketURL, path=["iserver", "accounts"]): pass
 
 class InteractiveSearchURL(InteractiveMarketURL, path=["iserver", "secdef", "search"], parameters={"secType": "STK", "name": True}):
-    @staticmethod
-    def parameters(*args, product, **kwargs): return {"symbol": str(product.ticker)}
+    pass
+
+#    @staticmethod
+#    def parameters(*args, product, **kwargs): return {"symbol": str(product.ticker)}
 
 class InteractiveStrikeURL(InteractiveMarketURL, path=["iserver", "secdef", "strikes"], parameters={"secType": "OPT"}):
-    @staticmethod
-    def parameters(*args, product, expire, **kwargs): return {"symbol": int(product.identity), "month": str(expire.strftime("%b%y").upper())}
+    pass
+
+#    @staticmethod
+#    def parameters(*args, product, expire, **kwargs): return {"symbol": int(product.identity), "month": str(expire.strftime("%b%y").upper())}
 
 class InteractiveSecurityURL(InteractiveMarketURL, path=["iserver", "marketdata", "snapshot"]):
-    @staticmethod
-    def parameters(*args, products, **kwargs):
-        assert products and all(type(product) is type(products[0]) for product in products)
-        products = list(products) if isinstance(products, list) else [products]
-        identities = ",".join(list(map(lambda product: int(product.identity), products)))
-        if isinstance(products[0], Querys.Symbol): codes = list(map(lambda field: field.code, stock_fields))
-        elif isinstance(products[0], Querys.Contract): codes = list(map(lambda field: field.code, option_fields))
-        else: raise TypeError()
-        return {"conids": identities, "fields": codes}
+    pass
+
+#    @staticmethod
+#    def parameters(*args, products, **kwargs):
+#        assert products and all(type(product) is type(products[0]) for product in products)
+#        products = list(products) if isinstance(products, list) else [products]
+#        identities = ",".join(list(map(lambda product: int(product.identity), products)))
+#        if isinstance(products[0], Querys.Symbol): codes = list(map(lambda field: field.code, stock_fields))
+#        elif isinstance(products[0], Querys.Contract): codes = list(map(lambda field: field.code, option_fields))
+#        else: raise TypeError()
+#        return {"conids": identities, "fields": codes}
 
 class InteractiveStockURL(InteractiveSecurityURL): pass
 class InteractiveOptionURL(InteractiveSecurityURL): pass
@@ -89,34 +95,64 @@ class InteractiveOptionData(InteractiveSecurityData, key="option", locator=None,
         dataframe["instrument"] = Concepts.Securities.Instrument.OPTION
         return dataframe
 
-class InteractiveContractPage(WebJSONPage):
-    def execute(self, *args, symbol, expiry, **kwargs):
-        url = InteractiveSearchURL(*args, product=str(symbol.ticker), **kwargs)
-        self.load(url, *args, **kwargs)
-        data = InteractiveSymbolData(self.json, *args, **kwargs)
-        symbol = data(*args, **kwargs)
-        data = InteractiveExpireData(self.json, *args, **kwargs)
-        expires = data(*args, **kwargs)
-        expires = set(expires) & set(expires)
-        generator = self.generator(*args, symbol=symbol, expires=expires, **kwargs)
-        contracts = list(generator)
-        return contracts
 
-    def generator(self, *args, symbol, expires, **kwargs):
-        for expire in expires:
-            url = InteractiveStrikeURL(*args, **kwargs)
-            self.load(url, *args, **kwargs)
-            data = InteractiveStrikeData(self.json, *args, **kwargs)
-            strikes = data(*args, **kwargs)
-            for option, strike in strikes.items():
-                contract = dict(ticker=str(symbol.ticker), expiry=expire, option=option, strike=float(strike), identity=int(symbol.identity))
-                contract = Querys.Contract(contract)
-                yield contract
+class InteractiveStockPage(WebJSONPage):
+    pass
+
+#    def execute(self, *args, symbols, **kwargs):
+#        url = InteractiveStockURL(*args, products=symbols, **kwargs)
+#        self.load(url, *args, **kwargs)
+#        datas = InteractiveStockData(self.json, *args, **kwargs)
+#        stocks = datas(*args, **kwargs)
+#        return stocks
+
+class InteractiveOptionPage(WebJSONPage):
+    pass
+
+#    def execute(self, *args, contracts, **kwargs):
+#        url = InteractiveOptionURL(*args, products=contracts, **kwargs)
+#        self.load(url, *args, **kwargs)
+#        datas = InteractiveOptionData(self.json, *args, **kwargs)
+#        options = datas(*args, **kwargs)
+#        return options
+
+class InteractiveContractPage(WebJSONPage):
+    pass
+
+#    def execute(self, *args, symbol, expiry, **kwargs):
+#        url = InteractiveSearchURL(*args, product=symbol, **kwargs)
+#        self.load(url, *args, **kwargs)
+#        data = InteractiveSymbolData(self.json, *args, **kwargs)
+#        symbol = data(*args, **kwargs)
+#        data = InteractiveExpireData(self.json, *args, **kwargs)
+#        expires = data(*args, **kwargs)
+#        expires = set(expires) & set(expires)
+#        generator = self.generator(*args, symbol=symbol, expires=expires, **kwargs)
+#        contracts = list(generator)
+#        return contracts
+
+#    def generator(self, *args, symbol, expires, **kwargs):
+#        for expire in expires:
+#            url = InteractiveStrikeURL(*args, product=symbol, expire=expire, **kwargs)
+#            self.load(url, *args, **kwargs)
+#            data = InteractiveStrikeData(self.json, *args, **kwargs)
+#            strikes = data(*args, **kwargs)
+#            for option, strike in strikes.items():
+#                contract = dict(ticker=str(symbol.ticker), expiry=expire, option=option, strike=float(strike), identity=int(symbol.identity))
+#                contract = Querys.Contract(contract)
+#                yield contract
 
 
 class InteractiveDownloader(Sizing, Emptying, Partition, Logging, ABC, title="Downloaded"): pass
 class InteractiveSecurityDownloader(InteractiveDownloader, ABC):
-    pass
+    @staticmethod
+    def querys(querys, querytype):
+        assert isinstance(querys, (list, dict, querytype))
+        assert all([isinstance(query, querytype) for query in querys]) if isinstance(querys, (list, dict)) else True
+        if isinstance(querys, querytype): querys = [querys]
+        elif isinstance(querys, dict): querys = SODict(querys)
+        else: querys = list(querys)
+        return querys
 
 
 class InteractiveStockDownloader(InteractiveSecurityDownloader):
