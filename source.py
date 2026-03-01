@@ -6,9 +6,9 @@ Created on Thurs Feb 26 2026
 
 """
 
-from ib_insync import IB
+import ib_insync as ibkr
 
-from webscraping.websource import WebSource
+from webscraping.websupport import WebSource, WebDelayer
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -24,12 +24,15 @@ class InteractiveSource(WebSource):
         self.__port = port
 
     def start(self):
-        self.source = IB()
+        self.source = ibkr.IB()
         parameters = dict(host=self.host, port=self.port, clientID=self.count, readonly=True)
         self.source.connect(**parameters)
 
     def stop(self):
         self.source.disconnect()
+
+#    def option(self, contract): return ibkr.Option(symbol.ticker, contract.expire.strftime("%Y%m%d"), contract.strike, str(contract.option)[0].upper(), "SMART")
+#    def stock(self, symbol): return ibkr.Stock(symbol.ticker, "SMART", "USD")
 
     @property
     def host(self): return self.__host

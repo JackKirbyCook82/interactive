@@ -6,6 +6,7 @@ Created on Mon Feb 10 2026
 
 """
 
+from webscraping.websupport import WebDownloader
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
 from support.mixins import Emptying, Sizing, Partition, Logging
@@ -17,43 +18,40 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
+
 class InteractiveStockPage(WebJSONPage):
-    pass
+    def execute(self, *args, symbols, **kwargs):
+        pass
 
 class InteractiveContractPage(WebJSONPage):
-    pass
+    def execute(self, *args, contracts, **kwargs):
+        pass
 
 class InteractiveOptionPage(WebJSONPage):
-    pass
+    def execute(self, *args, symbol, expiry, **kwargs):
+        pass
 
 
-
-class InteractiveDownloader(Sizing, Emptying, Partition, Logging, ABC, title="Downloaded"):
-    def __init_subclass__(cls, *args, page, **kwargs):
-        super().__init_subclass__(*args, **kwargs)
-        cls.Page = page
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.page = self.Page(*args, **kwargs)
+class InteractiveSecurityDownloader(WebDownloader):
+    def download(self, /, **kwargs):
+        pass
 
 
-class InteractiveSecurityDownloader(InteractiveDownloader):
-    pass
-
-
-class InteractiveStockDownloader(InteractiveDownloader, page=InteractiveStockPage):
+class InteractiveStockDownloader(InteractiveSecurityDownloader, page=InteractiveStockPage):
     def execute(self, symbols, /, **kwargs):
         pass
 
 
-class InteractiveOptionDownloader(InteractiveDownloader, page=InteractiveOptionPage):
+class InteractiveOptionDownloader(InteractiveSecurityDownloader, page=InteractiveOptionPage):
     def execute(self, contracts, /, **kwargs):
         pass
 
 
 class InteractiveContractDownloader(InteractiveDownloader, page=InteractiveContractPage):
-    def execute(self, symbols, /, **kwargs):
+    def execute(self, symbols, /, expiry=None, **kwargs):
+        pass
+
+    def download(self, /, **kwargs):
         pass
 
 
