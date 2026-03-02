@@ -6,6 +6,7 @@ Created on Mon Feb 10 2026
 
 """
 
+from finance.concepts import Concepts
 from webscraping.websupport import WebDownloader
 from webscraping.webpages import WebJSONPage
 from webscraping.webdatas import WebJSON
@@ -13,23 +14,28 @@ from support.mixins import Emptying, Sizing, Partition, Logging
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = []
+__all__ = ["InteractiveStockDownloader", "InteractiveOptionDownloader", "InteractiveContractDownloader"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-
-class InteractiveStockPage(WebJSONPage):
+class InteractiveStockPage(WebSUBSPage):
     def execute(self, *args, symbols, **kwargs):
-        pass
+        dataset = Concepts.Securities.Instrument.STOCK
+        self.load(dataset, *args, symbols=symbols, **kwargs)
 
-class InteractiveContractPage(WebJSONPage):
-    def execute(self, *args, contracts, **kwargs):
-        pass
 
-class InteractiveOptionPage(WebJSONPage):
+class InteractiveContractPage(WebSUBSPage):
     def execute(self, *args, symbol, expiry, **kwargs):
-        pass
+        parameters = dict(symbol=symbol, expiry=expiry, strikes=None)
+        contracts = self.source.contracts(*args, **parameters, **kwargs)
+        return list(contracts)
+
+class InteractiveOptionPage(WebSUBSPage):
+    def execute(self, *args, contracts, **kwargs):
+        dataset = Concepts.Securities.Instrument.OPTION
+        self.load(datset, *args, contracts=contracts, **kwargs)
+
 
 
 class InteractiveSecurityDownloader(WebDownloader):
