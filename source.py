@@ -7,23 +7,24 @@ Created on Thurs Feb 26 2026
 """
 
 import ib_insync as ibkr
-from numbers import Number
+from enum import Enum
 from itertools import product
-from datetime import datetime as Datetime
-from collections import OrderedDict as ODict
 
-from finance.concepts import Concepts
+from finance.concepts import Concepts, Querys
 from webscraping.websupport import WebSource, WebDelayer
 from support.concepts import NumRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
-__all__ = ["InteractiveSource"]
+__all__ = ["InteractiveSource", "InteractiveDataset"]
 __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-class InteractiveSourceError(Exception): pass
+InteractiveDataset = Enum("InteractiveDataset", ["STOCKS", "OPTIONS", "CONTRACTS"])
+
+
+class InteractiveDatasetError(Exception): pass
 class InteractiveSource(WebSource):
     def __init__(self, *args, host, port, quoting=Concepts.Markets.Quoting, readonly=True, **kwargs):
         super().__init__(*args, **kwargs)
@@ -42,32 +43,32 @@ class InteractiveSource(WebSource):
     def stop(self):
         self.source.disconnect()
 
-    @WebDelayer.register
-    def load(self, instrument, *args, **kwargs):
-        if instrument is Concepts.Securities.Instrument.STOCK: subscription = self.stocks(*args, **kwargs)
-        elif instrument is Concepts.Securities.Instrument.OPTION: subscription = self.options(*args, **kwargs)
-        else: raise InteractiveSourceError()
-        self.subscription.update(subscription)
+    def load(self, dataset, *args, **kwargs):
+        if dataset is InteractiveDataset.STOCKS: return self.stocks(*args, **kwargs)
+        elif dataset is InteractiveDataset.OPTIONS: return self.options(*args, **kwargs)
+        elif dataset is InteractiveDataset.CONTRACTS: return self.contracts(*args, **kwargs)
+        else: raise InteractiveDatasetError()
 
+    @WebDelayer.register
     def stocks(self, *args, symbols, **kwargs):
         ticker = lambda symbol: str(symbol.ticker)
         stocks = [ibkr.Stock(ticker(symbol), "SMART", "USD") for symbol in symbols]
-        ikbr.qualifyContracts(*stocks)
-        stocks = ibkr.reqTickers(*stocks)
-        return ODict([(symbol, stock) for symbol, stock in zip(symbols, stocks)])
+        ibkr.qualifyContracts(*stocks)
+        return ibkr.reqTickers(*stocks)
 
+    @WebDelayer.register
     def options(self,*args, contracts, **kwargs):
         ticker = lambda contract: str(contract.ticker)
         expire = lambda contract: str(contract.expire.strftime("%Y%m%d"))
         strike = lambda contract: float(contract.strike)
         option = lambda contract: str(contract.option)[0].upper()
         options = [ibkr.Option(ticker(contract), expire(contract), strike(contract), option(contract)) for contract in contracts]
-        ikbr.qualifyContracts(*options)
-        options = ikbr.reqTickers(*options)
-        return ODict([(contract, option) for contract, option in zip(contracts, options)])
+        ibkr.qualifyContracts(*options)
+        return ibkr.reqTickers(*options)
 
+    @WebDelayer.register
     def contracts(self, *args, symbol, expiry=None, strikes=None, **kwargs):
-        underlying = Stock(symbol.ticker, "SMART", "USD")
+        underlying = ibkr.Stock(symbol.ticker, "SMART", "USD")
         underlying = ibkr.qualifyContracts(underlying)
         chain = ibkr.reqSecDefOptParams(underlying.symbol, "", underlying.secType, underlying.conId)
         underlying = ibkr.reqMktData(underlying, snapshot=True)
@@ -75,8 +76,13 @@ class InteractiveSource(WebSource):
         ticker, spot = underlying.symbol, underlying.marketPrice()
         strikes = NumRange([spot * strike for strike in strikes]) if strikes is not None else strikes
         isin = lambda value, values: value in values if values is not None else True
-        expires = [expire for expire in sorted(chain.expirations) if isin(expire, expires)]
+        expires = [expire for expire in sorted(chain.expirations) if isin(expire, expiry)]
         strikes = [strike for strike in sorted(chain.strikes) if isin(strike, strikes)]
+        contracts = self.generator([ticker], expires, strikes)
+        return contracts
+
+    @staticmethod
+    def generator(tickers, expires, strikes):
         for ticker, expire, strike, option in product(tickers, expires, strikes, ["P", "C"]):
             details = ibkr.Option(ticker, expire, strike, option, "SMART")
             details = ibkr.reqContractDetails(details)
