@@ -44,6 +44,9 @@ class InteractiveSource(WebSource):
         self.source.disconnect()
 
     def load(self, dataset, *args, **kwargs):
+        if isinstance(dataset, str): dataset = InteractiveDataset[str(dataset).upper()]
+        elif dataset in InteractiveDataset: pass
+        else: TypeError(type(dataset))
         if dataset is InteractiveDataset.STOCKS: return self.stocks(*args, **kwargs)
         elif dataset is InteractiveDataset.OPTIONS: return self.options(*args, **kwargs)
         elif dataset is InteractiveDataset.CONTRACTS: return self.contracts(*args, **kwargs)
@@ -54,7 +57,7 @@ class InteractiveSource(WebSource):
         ticker = lambda symbol: str(symbol.ticker)
         stocks = [ibkr.Stock(ticker(symbol), "SMART", "USD") for symbol in symbols]
         ibkr.qualifyContracts(*stocks)
-        return ibkr.reqTickers(*stocks)
+        return list(ibkr.reqTickers(*stocks))
 
     @WebDelayer.register
     def options(self,*args, contracts, **kwargs):
@@ -64,7 +67,7 @@ class InteractiveSource(WebSource):
         option = lambda contract: str(contract.option)[0].upper()
         options = [ibkr.Option(ticker(contract), expire(contract), strike(contract), option(contract)) for contract in contracts]
         ibkr.qualifyContracts(*options)
-        return ibkr.reqTickers(*options)
+        return list(ibkr.reqTickers(*options))
 
     @WebDelayer.register
     def contracts(self, *args, symbol, expiry=None, strikes=None, **kwargs):
@@ -79,7 +82,7 @@ class InteractiveSource(WebSource):
         expires = [expire for expire in sorted(chain.expirations) if isin(expire, expiry)]
         strikes = [strike for strike in sorted(chain.strikes) if isin(strike, strikes)]
         contracts = self.generator([ticker], expires, strikes)
-        return contracts
+        return list(contracts)
 
     @staticmethod
     def generator(tickers, expires, strikes):
