@@ -8,7 +8,6 @@ Created on Thurs Mar 5 2026
 
 import pandas as pd
 
-from finance.concepts import Concepts
 from webscraping.webpages import WebJSONPage, WebUploader
 
 __author__ = "Jack Kirby Cook"
@@ -32,7 +31,7 @@ class InteractiveOrderUploader(WebUploader, page=InteractiveOrderPage):
 
     @staticmethod
     def calculator(prospects, /, term, tenure, **kwargs):
-        assert term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
+        pass
 
 
 
