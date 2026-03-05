@@ -12,10 +12,9 @@ from abc import ABC
 from datetime import datetime as Datetime
 
 from interactive.source import InteractiveDataset
-from finance.concepts import Concepts
-from webscraping.websupport import WebDownloader
-from webscraping.webpages import WebSOCKPage
-from webscraping.webdatas import WebNAME
+from finance.concepts import Querys, Concepts
+from webscraping.webpages import WebATTRPage, WebDownloader
+from webscraping.webdatas import WebATTR
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -30,13 +29,13 @@ option_parser = lambda contract: {str(option)[0].upper(): option for option in i
 strike_parser = lambda contract: float(int(str(contract)[-8:]) / 1000)
 
 
-class InteractiveStocksData(WebNAME, multiple=True, optional=False):
-    class Ticker(WebNAME.Text, locator="contract", key="ticker", parser=str): pass
-    class Last(WebNAME.Text, locator="last", key="last", parser=np.float32): pass
-    class Bid(WebNAME.Text, locator="bid", key="bid", parser=np.float32): pass
-    class Ask(WebNAME.Text, locator="ask", key="ask", parser=np.float32): pass
-    class Demand(WebNAME.Text, locator="bidSize", key="demand", parser=np.int32): pass
-    class Supply(WebNAME.Text, locator="askSize", key="supply", parser=np.int32): pass
+class InteractiveStocksData(WebATTR, multiple=True, optional=False):
+    class Ticker(WebATTR.Text, locator="contract", key="ticker", parser=str): pass
+    class Last(WebATTR.Text, locator="last", key="last", parser=np.float32): pass
+    class Bid(WebATTR.Text, locator="bid", key="bid", parser=np.float32): pass
+    class Ask(WebATTR.Text, locator="ask", key="ask", parser=np.float32): pass
+    class Demand(WebATTR.Text, locator="bidSize", key="demand", parser=np.int32): pass
+    class Supply(WebATTR.Text, locator="askSize", key="supply", parser=np.int32): pass
 
     def execute(self, *args, **kwargs):
         stock = super().execute(*args, **kwargs)
@@ -47,17 +46,17 @@ class InteractiveStocksData(WebNAME, multiple=True, optional=False):
         return stock
 
 
-class InteractiveOptionsData(WebNAME, ABC, multiple=False, optional=False):
-    class Ticker(WebNAME.Text, locator="contract", key="ticker", parser=ticker_parser): pass
-    class Expire(WebNAME.Text, locator="contract", key="expire", parser=expire_parser): pass
-    class Strike(WebNAME.Text, locator="contract", key="strike", parser=strike_parser): pass
-    class Option(WebNAME.Text, locator="contract", key="option", parser=option_parser): pass
-    class Last(WebNAME.Text, locator="last", key="last", parser=np.float32): pass
-    class Bid(WebNAME.Text, locator="bid", key="bid", parser=np.float32): pass
-    class Ask(WebNAME.Text, locator="ask", key="ask", parser=np.float32): pass
-    class Demand(WebNAME.Text, locator="bidSize", key="demand", parser=np.int32): pass
-    class Supply(WebNAME.Text, locator="askSize", key="supply", parser=np.int32): pass
-    class Implied(WebNAME.Text, locator="modelGreeks.impliedVol", key="implied", parser=np.float32): pass
+class InteractiveOptionsData(WebATTR, ABC, multiple=False, optional=False):
+    class Ticker(WebATTR.Text, locator="contract", key="ticker", parser=ticker_parser): pass
+    class Expire(WebATTR.Text, locator="contract", key="expire", parser=expire_parser): pass
+    class Strike(WebATTR.Text, locator="contract", key="strike", parser=strike_parser): pass
+    class Option(WebATTR.Text, locator="contract", key="option", parser=option_parser): pass
+    class Last(WebATTR.Text, locator="last", key="last", parser=np.float32): pass
+    class Bid(WebATTR.Text, locator="bid", key="bid", parser=np.float32): pass
+    class Ask(WebATTR.Text, locator="ask", key="ask", parser=np.float32): pass
+    class Demand(WebATTR.Text, locator="bidSize", key="demand", parser=np.int32): pass
+    class Supply(WebATTR.Text, locator="askSize", key="supply", parser=np.int32): pass
+    class Implied(WebATTR.Text, locator="modelGreeks.impliedVol", key="implied", parser=np.float32): pass
 
     def execute(self, *args, **kwargs):
         option = super().execute(*args, **kwargs)
@@ -67,7 +66,7 @@ class InteractiveOptionsData(WebNAME, ABC, multiple=False, optional=False):
         return option
 
 
-class InteractivePage(WebSOCKPage, ABC):
+class InteractivePage(WebATTRPage, ABC):
     def load(self, dataset, *args, **kwargs):
         self.console(str(dataset), title="Loading")
         return self.source.load(dataset, *args, **kwargs)
@@ -97,27 +96,73 @@ class InteractiveOptionPage(InteractivePage):
         return options
 
 
-class InteractiveSecurityDownloader(WebDownloader):
+class InteractiveSecurityDownloader(WebDownloader, ABC):
     def download(self, /, **kwargs):
-        pass
+        securities = self.page(**kwargs)
+        assert isinstance(securities, pd.DataFrame)
+        assert not self.empty(securities)
+        return securities
 
 
 class InteractiveStockDownloader(InteractiveSecurityDownloader, page=InteractiveStockPage):
     def execute(self, symbols, /, **kwargs):
-        pass
+        symbols = self.querys(symbols, Querys.Symbol)
+        if not bool(symbols): return
+        if bool(self.limit):
+            symbols = [symbols[index:index+self.limit] for index in range(0, len(symbols), self.limit)]
+        for symbols in iter(symbols):
+            stocks = self.download(symbols=symbols, **kwargs)
+            assert isinstance(stocks, pd.DataFrame)
+            if self.empty(stocks): continue
+            if isinstance(symbols, dict):
+                function = lambda series: symbols[Querys.Symbol(series.to_dict())]
+                values = stocks[list(Querys.Symbol)].apply(function, axis=1, result_type="expand")
+                stocks = pd.concat([stocks, values], axis=1)
+            symbols = self.keys(stocks, by=Querys.Symbol)
+            symbols = ",".join(list(map(str, symbols)))
+            size = self.size(stocks)
+            self.console(f"{str(symbols)}[{int(size):.0f}]")
+            if self.empty(stocks): continue
+            yield stocks
 
 
 class InteractiveOptionDownloader(InteractiveSecurityDownloader, page=InteractiveOptionPage):
     def execute(self, contracts, /, **kwargs):
-        pass
+        contracts = self.querys(contracts, Querys.Contract)
+        if not bool(contracts): return
+        if bool(self.limit):
+            contracts = [contracts[index:index+self.limit] for index in range(0, len(contracts), self.limit)]
+        for contracts in iter(contracts):
+            options = self.download(contracts=contracts, **kwargs)
+            assert isinstance(options, pd.DataFrame)
+            if self.empty(options): continue
+            if isinstance(contracts, dict):
+                function = lambda series: contracts[Querys.Contract(series.to_dict())]
+                values = options[list(Querys.Contract)].apply(function, axis=1, result_type="expand")
+                options = pd.concat([options, values], axis=1)
+            settlements = self.keys(options, by=Querys.Settlement)
+            settlements = ",".join(list(map(str, settlements)))
+            size = self.size(options)
+            self.console(f"{str(settlements)}[{int(size):.0f}]")
+            if self.empty(options): continue
+            yield options
 
 
 class InteractiveContractDownloader(InteractiveSecurityDownloader, page=InteractiveContractPage):
     def execute(self, symbols, /, expiry=None, **kwargs):
-        pass
+        symbols = self.querys(symbols, Querys.Symbol)
+        if not bool(symbols): return
+        for symbol in iter(symbols):
+            contracts = self.download(symbol=symbol, expiry=expiry, **kwargs)
+            self.console(f"{str(symbol)}[{len(contracts):.0f}]")
+            if not bool(contracts): continue
+            yield contracts
 
     def download(self, /, **kwargs):
-        pass
+        contracts = self.page(**kwargs)
+        assert isinstance(contracts, list)
+        contracts.sort(key=lambda contract: contract.expire)
+        return contracts
 
 
 
