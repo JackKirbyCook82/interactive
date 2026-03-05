@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Mon Feb 10 2026
-@name:   Interactive Brokers Market Objects
+@name:   Interactive Market Objects
 @author: Jack Kirby Cook
 
 """

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thurs Feb 26 2026
-@name:   Interactive Brokers Source Objects
+@name:   Interactive Source Objects
 @author: Jack Kirby Cook
 
 """

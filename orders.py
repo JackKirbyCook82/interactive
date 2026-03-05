@@ -1,13 +1,14 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thurs Mar 5 2026
-@name:   ETrade Order Objects
+@name:   Interactive Order Objects
 @author: Jack Kirby Cook
 
 """
 
 import pandas as pd
 
+from finance.concepts import Concepts
 from webscraping.webpages import WebJSONPage, WebUploader
 
 __author__ = "Jack Kirby Cook"
@@ -31,7 +32,7 @@ class InteractiveOrderUploader(WebUploader, page=InteractiveOrderPage):
 
     @staticmethod
     def calculator(prospects, /, term, tenure, **kwargs):
-        pass
+        assert term in (Concepts.Markets.Term.MARKET, Concepts.Markets.Term.LIMIT)
 
 
 
