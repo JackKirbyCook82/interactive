@@ -9,6 +9,8 @@ Created on Mon Feb 10 2026
 import numpy as np
 import pandas as pd
 from abc import ABC
+from itertools import groupby
+from operator import attrgetter
 from datetime import datetime as Datetime
 
 from interactive.source import InteractiveDataset
@@ -108,8 +110,7 @@ class InteractiveStockDownloader(InteractiveSecurityDownloader, page=Interactive
     def execute(self, symbols, /, **kwargs):
         symbols = self.querys(symbols, Querys.Symbol)
         if not bool(symbols): return
-        if bool(self.limit):
-            symbols = [symbols[index:index+self.limit] for index in range(0, len(symbols), self.limit)]
+        symbols = [symbols[index:index+25] for index in range(0, len(symbols), 25)]
         for symbols in iter(symbols):
             stocks = self.download(symbols=symbols, **kwargs)
             assert isinstance(stocks, pd.DataFrame)
@@ -130,8 +131,8 @@ class InteractiveOptionDownloader(InteractiveSecurityDownloader, page=Interactiv
     def execute(self, contracts, /, **kwargs):
         contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
-        if bool(self.limit):
-            contracts = [contracts[index:index+self.limit] for index in range(0, len(contracts), self.limit)]
+        sortkey = attrgetter("ticker", "expire")
+        contracts = [list(group) for _, group in groupby(sorted(contracts, key=sortkey), key=sortkey)]
         for contracts in iter(contracts):
             options = self.download(contracts=contracts, **kwargs)
             assert isinstance(options, pd.DataFrame)
