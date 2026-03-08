@@ -71,7 +71,7 @@ class InteractiveOptionsData(WebATTR, ABC, multiple=False, optional=False):
 class InteractivePage(WebATTRPage, ABC):
     def load(self, dataset, *args, **kwargs):
         self.console(str(dataset), title="Loading")
-        return self.source.load(dataset, *args, **kwargs)
+        return self.source.get(dataset, *args, **kwargs)
 
 class InteractiveStockPage(InteractivePage):
     def execute(self, *args, symbols, **kwargs):

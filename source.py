@@ -43,7 +43,8 @@ class InteractiveSource(WebSource):
     def stop(self):
         self.source.disconnect()
 
-    def load(self, dataset, *args, **kwargs):
+    @WebDelayer.register
+    def get(self, dataset, *args, **kwargs):
         if isinstance(dataset, str): dataset = InteractiveDataset[str(dataset).upper()]
         elif dataset in InteractiveDataset: pass
         else: TypeError(type(dataset))
@@ -53,13 +54,22 @@ class InteractiveSource(WebSource):
         else: raise InteractiveDatasetError()
 
     @WebDelayer.register
+    def post(self, *args, **kwargs):
+        pass
+
+
+    def market(self, *args, **kwargs):
+        pass
+
+    def limit(self, *args, **kwargs):
+        pass
+
     def stocks(self, *args, symbols, **kwargs):
         ticker = lambda symbol: str(symbol.ticker)
         stocks = [ibkr.Stock(ticker(symbol), "SMART", "USD") for symbol in symbols]
         ibkr.qualifyContracts(*stocks)
         return list(ibkr.reqTickers(*stocks))
 
-    @WebDelayer.register
     def options(self,*args, contracts, **kwargs):
         ticker = lambda contract: str(contract.ticker)
         expire = lambda contract: str(contract.expire.strftime("%Y%m%d"))
@@ -69,7 +79,6 @@ class InteractiveSource(WebSource):
         ibkr.qualifyContracts(*options)
         return list(ibkr.reqTickers(*options))
 
-    @WebDelayer.register
     def contracts(self, *args, symbol, expiry=None, strikes=None, **kwargs):
         underlying = ibkr.Stock(symbol.ticker, "SMART", "USD")
         underlying = ibkr.qualifyContracts(underlying)
