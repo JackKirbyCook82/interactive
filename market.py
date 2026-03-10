@@ -6,10 +6,11 @@ Created on Mon Feb 10 2026
 
 """
 
+import itertools
 import numpy as np
 import pandas as pd
+import ib_insync as ibkr
 from abc import ABC
-from itertools import groupby
 from operator import attrgetter
 from datetime import datetime as Datetime
 
@@ -17,6 +18,7 @@ from interactive.source import InteractiveDataset
 from finance.concepts import Querys, Concepts
 from webscraping.webpages import WebATTRPage, WebDownloader
 from webscraping.webdatas import WebATTR
+from support.concepts import NumRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -25,10 +27,15 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-ticker_parser = lambda contract: str(contract[:-15])
-expire_parser = lambda contract: Datetime.strptime("20" + str(contract)[-15:-9], "%Y%m%d")
-option_parser = lambda contract: {str(option)[0].upper(): option for option in iter(Concepts.Securities.Option) if bool(option)}[str(contract)[-9]]
-strike_parser = lambda contract: float(int(str(contract)[-8:]) / 1000)
+ticker_formatter = lambda product: str(product.ticker)
+expire_formatter = lambda product: str(product.expire.strftime("%Y%m%d"))
+option_formatter = lambda product: str(product.option)[0].upper()
+strike_formatter = lambda product: float(product.strike)
+
+ticker_parser = lambda product: str(product[:-15])
+expire_parser = lambda product: Datetime.strptime("20" + str(product)[-15:-9], "%Y%m%d")
+option_parser = lambda product: {str(option)[0].upper(): option for option in iter(Concepts.Securities.Option) if bool(option)}[str(product)[-9]]
+strike_parser = lambda product: float(int(str(product)[-8:]) / 1000)
 
 
 class InteractiveStocksData(WebATTR, multiple=True, optional=False):
@@ -68,34 +75,41 @@ class InteractiveOptionsData(WebATTR, ABC, multiple=False, optional=False):
         return option
 
 
-class InteractivePage(WebATTRPage, ABC):
-    def load(self, dataset, *args, **kwargs):
-        self.console(str(dataset), title="Loading")
-        return self.source.get(dataset, *args, **kwargs)
-
-class InteractiveStockPage(InteractivePage):
+class InteractiveStockPage(WebATTRPage):
     def execute(self, *args, symbols, **kwargs):
-        parameters = dict(symbols=symbols)
-        naming = self.load(InteractiveDataset.STOCKS, *args, **parameters, **kwargs)
-        datas = InteractiveStocksData(naming, *args, **kwargs)
-        stocks = [data(*args, **kwargs) for data in iter(datas)]
+        products = [ibkr.Stock(ticker_formatter(symbol), "SMART", "USD") for symbol in symbols]
+        stocks = self.load(InteractiveDataset.STOCKS, *args, products=products, **kwargs)
+        stocks = [stock(*args, **kwargs) for stock in iter(stocks)]
         stocks = pd.concat(stocks, axis=0)
         return stocks
 
-class InteractiveContractPage(InteractivePage):
-    def execute(self, *args, symbol, expiry, **kwargs):
-        parameters = dict(symbol=symbol, expiry=expiry)
-        contracts = self.load(InteractiveDataset.OPTIONS, *args, **parameters, **kwargs)
-        return contracts
-
-class InteractiveOptionPage(InteractivePage):
+class InteractiveOptionPage(WebATTRPage):
     def execute(self, *args, contracts, **kwargs):
-        parameters = dict(contracts=contracts)
-        naming = self.load(InteractiveDataset.OPTIONS, *args, **parameters, **kwargs)
-        datas = InteractiveOptionsData(naming, *args, **kwargs)
-        options = [data(*args, **kwargs) for data in iter(datas)]
+        products = [ibkr.Option(ticker_formatter(contract), expire_formatter(contract), strike_formatter(contract), option_formatter(contract), "SMART") for contract in contracts]
+        options = self.load(InteractiveDataset.OPTIONS, *args, products=products, **kwargs)
+        options = [option(*args, **kwargs) for option in iter(options)]
         options = pd.concat(options, axis=0)
         return options
+
+class InteractiveContractPage(WebATTRPage):
+    def execute(self, *args, symbol, expiry=None, strikes=None, **kwargs):
+        underlying = ibkr.Stock(ticker_formatter(symbol), "SMART", "USD")
+        underlying = self.load(InteractiveDataset.STOCKS, *args, products=[underlying], **kwargs)[0]
+        chain = self.load(InteractiveDataset.CHAINS, *args, products=[underlying], **kwargs)[0]
+        strikes = NumRange([underlying.last * strike for strike in strikes]) if strikes is not None else strikes
+        isin = lambda value, values: value in values if values is not None else True
+        expires = [expire for expire in sorted(chain.expirations) if isin(expire, expiry)]
+        strikes = [strike for strike in sorted(chain.strikes) if isin(strike, strikes)]
+        options = {"P": Concepts.Securities.Option.PUT, "C": Concepts.Securities.Option.CALL}
+        products = itertools.product([underlying.ticker], expires, strikes, list(options.keys()))
+        products = [ibkr.Option(*product, "SMART") for product in products]
+        contracts = self.load(InteractiveDataset.CONTRACTS, *args, products=products, **kwargs)
+        ticker = lambda contract: str(contract)
+        expire = lambda contract: Datetime.strptime(contract.lastTradeDateOrContractMonth, "%Y%m%d")
+        option = lambda contract: options[contract.right]
+        strike = lambda contract: float(contract.strike)
+        contracts = [Querys.Contract(ticker(contract), expire(contract), option(contract), strike(contracts)) for contract in iter(contracts)]
+        return contracts
 
 
 class InteractiveSecurityDownloader(WebDownloader, ABC):
@@ -132,7 +146,7 @@ class InteractiveOptionDownloader(InteractiveSecurityDownloader, page=Interactiv
         contracts = self.querys(contracts, Querys.Contract)
         if not bool(contracts): return
         sortkey = attrgetter("ticker", "expire")
-        contracts = [list(group) for _, group in groupby(sorted(contracts, key=sortkey), key=sortkey)]
+        contracts = [list(group) for _, group in itertools.groupby(sorted(contracts, key=sortkey), key=sortkey)]
         for contracts in iter(contracts):
             options = self.download(contracts=contracts, **kwargs)
             assert isinstance(options, pd.DataFrame)

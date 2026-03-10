@@ -12,6 +12,7 @@ import ib_insync as ibkr
 from abc import ABC
 from types import SimpleNamespace
 
+from interactive.source import InteractiveDataset
 from finance.concepts import Querys, Concepts, Securities
 from webscraping.webpages import WebATTRPage, WebUploader
 from support.mixins import Naming
@@ -42,10 +43,10 @@ class InteractiveValuation(Naming, fields=["npv"]):
 class InteractiveOrderPage(WebATTRPage):
     def execute(self, *args, order, **kwargs):
         securities = self.securities(order, **kwargs)
-        strategy = ibkr.Contract(str(order.ticker), "BAG", "SMART", "USD")
-        strategy.comboLegs = securities
+        products = ibkr.Contract(str(order.ticker), "BAG", "SMART", "USD")
+        products.comboLegs = securities
         order = order_formatters[order.term](order)
-        ibkr.placeOrder(strategy, order)
+        self.load(InteractiveDataset.ORDER, *args, order=order, products=products, **kwargs)
 
     @staticmethod
     def securities(order, /, **kwargs):

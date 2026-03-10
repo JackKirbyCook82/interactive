@@ -8,11 +8,9 @@ Created on Thurs Feb 26 2026
 
 import ib_insync as ibkr
 from enum import Enum
-from itertools import product
 
-from finance.concepts import Concepts, Querys
+from finance.concepts import Concepts
 from webscraping.websupport import WebSource, WebDelayer
-from support.concepts import NumRange
 
 __version__ = "1.0.0"
 __author__ = "Jack Kirby Cook"
@@ -21,7 +19,7 @@ __copyright__ = "Copyright 2026, Jack Kirby Cook"
 __license__ = "MIT License"
 
 
-InteractiveDataset = Enum("InteractiveDataset", ["STOCKS", "OPTIONS", "CONTRACTS"])
+InteractiveDataset = Enum("InteractiveDataset", ["STOCKS", "OPTIONS", "CHAINS", "CONTRACTS"])
 
 
 class InteractiveDatasetError(Exception): pass
@@ -44,64 +42,46 @@ class InteractiveSource(WebSource):
         self.source.disconnect()
 
     @WebDelayer.register
-    def get(self, dataset, *args, **kwargs):
+    def load(self, dataset, *args, **kwargs):
         if isinstance(dataset, str): dataset = InteractiveDataset[str(dataset).upper()]
         elif dataset in InteractiveDataset: pass
         else: TypeError(type(dataset))
         if dataset is InteractiveDataset.STOCKS: return self.stocks(*args, **kwargs)
         elif dataset is InteractiveDataset.OPTIONS: return self.options(*args, **kwargs)
+        elif dataset is InteractiveDataset.CHAINS: return self.chain(*args, **kwargs)
         elif dataset is InteractiveDataset.CONTRACTS: return self.contracts(*args, **kwargs)
+        elif dataset is InteractiveDataset.ORDER: return self.order(*args, **kwargs)
         else: raise InteractiveDatasetError()
 
-    @WebDelayer.register
-    def post(self, *args, **kwargs):
-        pass
-
-
-    def market(self, *args, **kwargs):
-        pass
-
-    def limit(self, *args, **kwargs):
-        pass
-
-    def stocks(self, *args, symbols, **kwargs):
-        ticker = lambda symbol: str(symbol.ticker)
-        stocks = [ibkr.Stock(ticker(symbol), "SMART", "USD") for symbol in symbols]
-        ibkr.qualifyContracts(*stocks)
-        return list(ibkr.reqTickers(*stocks))
-
-    def options(self,*args, contracts, **kwargs):
-        ticker = lambda contract: str(contract.ticker)
-        expire = lambda contract: str(contract.expire.strftime("%Y%m%d"))
-        strike = lambda contract: float(contract.strike)
-        option = lambda contract: str(contract.option)[0].upper()
-        options = [ibkr.Option(ticker(contract), expire(contract), strike(contract), option(contract)) for contract in contracts]
-        ibkr.qualifyContracts(*options)
-        return list(ibkr.reqTickers(*options))
-
-    def contracts(self, *args, symbol, expiry=None, strikes=None, **kwargs):
-        underlying = ibkr.Stock(symbol.ticker, "SMART", "USD")
-        underlying = ibkr.qualifyContracts(underlying)
-        chain = ibkr.reqSecDefOptParams(underlying.symbol, "", underlying.secType, underlying.conId)
-        underlying = ibkr.reqMktData(underlying, snapshot=True)
-        ibkr.sleep(1)
-        ticker, spot = underlying.symbol, underlying.marketPrice()
-        strikes = NumRange([spot * strike for strike in strikes]) if strikes is not None else strikes
-        isin = lambda value, values: value in values if values is not None else True
-        expires = [expire for expire in sorted(chain.expirations) if isin(expire, expiry)]
-        strikes = [strike for strike in sorted(chain.strikes) if isin(strike, strikes)]
-        contracts = self.generator([ticker], expires, strikes)
-        return list(contracts)
+    @staticmethod
+    def stocks(*args, products, **kwargs):
+        ibkr.qualifyContracts(*products)
+        products = list(ibkr.reqTickers(*products))
+        yield from products
 
     @staticmethod
-    def generator(tickers, expires, strikes):
-        for ticker, expire, strike, option in product(tickers, expires, strikes, ["P", "C"]):
-            details = ibkr.Option(ticker, expire, strike, option, "SMART")
-            details = ibkr.reqContractDetails(details)
+    def options(*args, products, **kwargs):
+        ibkr.qualifyContracts(*products)
+        products = list(ibkr.reqTickers(*products))
+        yield from products
+
+    @staticmethod
+    def chain(*args, products, **kwargs):
+        for product in products:
+            chain = ibkr.reqSecDefOptParams(product.ticker, "", "STK", product.conId)
+            yield chain
+
+    @staticmethod
+    def contracts(*args, products, **kwargs):
+        for product in products:
+            details = ibkr.reqContractDetails(product)
             if not bool(details): continue
             assert len(details) == 1
-            contract = Querys.Contract(ticker, expire, option, strike, "SMART")
-            yield contract
+            yield details[0].contract
+
+    @staticmethod
+    def order(*args, order, products, **kwargs):
+        ibkr.placeOrder(products, order)
 
     @property
     def readonly(self): return self.__readonly
